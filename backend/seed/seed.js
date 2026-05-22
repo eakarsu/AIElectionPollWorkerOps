@@ -41,6 +41,7 @@ async function run() {
       DROP TABLE IF EXISTS attachments           CASCADE;
       DROP TABLE IF EXISTS webhooks              CASCADE;
       DROP TABLE IF EXISTS webhook_deliveries    CASCADE;
+      DROP TABLE IF EXISTS ai_approvals          CASCADE;
     `);
 
     console.log('[seed] applying migrations...');
@@ -48,6 +49,8 @@ async function run() {
     await client.query(schema1);
     const schema2 = fs.readFileSync(path.join(__dirname, '..', 'migrations', '002_schema.sql'), 'utf8');
     await client.query(schema2);
+    const schema3 = fs.readFileSync(path.join(__dirname, '..', 'migrations', '003_schema.sql'), 'utf8');
+    await client.query(schema3);
 
     // ─────────────────────────────────────────────
     // 18 domain entities (15 rows each)

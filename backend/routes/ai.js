@@ -462,6 +462,29 @@ router.post('/training-gap-analysis', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ──────────────────────────────────────────────────────────────
+// Sensitive AI output helper (Pass 7).
+// Any AI output that touches incident records or voter-facing comms
+// is wrapped with requires_review:true and an ai_approvals row in
+// status='pending'. Approval requires approver_id + approval_timestamp
+// via /api/ai-approvals/:id/approve.
+// ──────────────────────────────────────────────────────────────
+async function recordPendingApproval({ feature, resource_type, resource_id, payload, requested_by }) {
+  try {
+    const r = await pool.query(
+      `INSERT INTO ai_approvals
+         (feature, resource_type, resource_id, payload, status, requires_review, requested_by)
+       VALUES ($1, $2, $3, $4, 'pending', TRUE, $5)
+       RETURNING id, created_at`,
+      [feature, resource_type || null, resource_id || null, payload || {}, requested_by || null]
+    );
+    return r.rows[0] || null;
+  } catch (e) {
+    console.warn(`[ai] failed to record pending approval for ${feature}:`, e.message);
+    return null;
+  }
+}
+
 // 15. POST /api/ai/voter-communication-draft
 router.post('/voter-communication-draft', async (req, res) => {
   try {
@@ -473,8 +496,25 @@ router.post('/voter-communication-draft', async (req, res) => {
       ? channels
       : (typeof channels === 'string' ? channels.split(',').map(s => s.trim()).filter(Boolean) : []);
     const result = await ai.voterCommunicationDraft(audience, situation, chList);
-    await record('voter-communication-draft', { audience, situation, channels: chList }, result);
-    res.json(result);
+    // Voter-facing: mandatory human review.
+    const approval = await recordPendingApproval({
+      feature: 'voter-communication-draft',
+      resource_type: 'voter_comm',
+      resource_id: null,
+      payload: { audience, situation, channels: chList, draft: result },
+      requested_by: req.user?.email || req.user?.id || null,
+    });
+    const out = {
+      ...result,
+      requires_review: true,
+      approval_status: 'pending',
+      approver_id: null,
+      approval_timestamp: null,
+      approval_id: approval ? approval.id : null,
+      disclaimer: result?.disclaimer || 'DRAFT — not for release until reviewed and approved by an authorized election official.',
+    };
+    await record('voter-communication-draft', { audience, situation, channels: chList }, out);
+    res.json(out);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -497,6 +537,259 @@ router.post('/post-election-report', async (req, res) => {
     const result = await ai.postElectionReport(snap);
     await record('post-election-report', { notes: req.body?.notes || null }, result);
     res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ──────────────────────────────────────────────────────────────
+// Pass 7 — Backlog AI verbs
+// ──────────────────────────────────────────────────────────────
+
+// Samples for the 4 new verbs (5 each).
+const BACKLOG_SAMPLES = {
+  'training-qa-copilot': [
+    {
+      label: 'Provisional ballot — voter not on roll',
+      values: {
+        question: 'A voter is not on the registration roll but insists they registered. What do I do?',
+        role: 'poll_worker',
+        handbook_context: 'Provisional Ballot Procedure (Sec. 4.3): If a voter\'s name is not on the precinct register, the poll worker shall offer a provisional ballot, verify the voter signs the provisional envelope, and note reason code "NR" (not on roll). Provisional ballots are reviewed by the County Election Board within 7 days.',
+      },
+    },
+    {
+      label: 'ePollbook offline procedure',
+      values: {
+        question: 'The ePollbook lost its network connection. Can we keep checking voters in?',
+        role: 'chief_judge',
+        handbook_context: 'ePollbook Offline Mode (Sec. 6.2): Devices retain a local copy of the precinct register and may continue to process check-ins. Do NOT close polls. Sync queued check-ins when connectivity returns; chief judge logs offline window start/end in the incident log.',
+      },
+    },
+    {
+      label: 'Voter intimidation — observer crossing the line',
+      values: {
+        question: 'An observer is approaching voters at the booth and asking who they voted for. What is our authority?',
+        role: 'chief_judge',
+        handbook_context: 'Observer Conduct (Sec. 9.1): Observers may not approach, address, or photograph voters. Chief judge may revoke credentials for repeated violations and must notify the County Election Board. Law enforcement may be summoned only if voter safety is at immediate risk.',
+      },
+    },
+    {
+      label: 'ADA — voter requests curbside voting',
+      values: {
+        question: 'A voter cannot enter the polling place and is asking for curbside voting. Do we offer that?',
+        role: 'poll_worker',
+        handbook_context: 'ADA Curbside Voting (Sec. 7.4): Voters with mobility limitations may request curbside voting. Two poll workers of different party affiliations bring the ballot and ADA-compliant equipment to the vehicle. Process is identical to in-precinct voting; chief judge documents the curbside event.',
+      },
+    },
+    {
+      label: 'Out-of-handbook — bomb threat',
+      values: {
+        question: 'We just received a bomb threat call. What do we do?',
+        role: 'chief_judge',
+        handbook_context: '',
+      },
+    },
+  ],
+
+  'incident-report-draft': [
+    {
+      label: 'Equipment malfunction — scanner jam',
+      values: {
+        incident_id: 'INC-2207',
+        precinct_id: 'PCT-008',
+        type: 'equipment_malfunction',
+        severity: 'medium',
+        triage_notes: 'Scanner BSN-A-0294 jammed on third ballot of the morning. Two clerks unjammed; no ballots damaged. Backup scanner online in 11 minutes.',
+        structured_facts: 'opened_at=09:14, mitigated_at=09:25, ballots_affected=0, workers_present=PW-1041, PW-1052, witness=EJ-3007',
+      },
+    },
+    {
+      label: 'Voter intimidation report — observer conduct',
+      values: {
+        incident_id: 'INC-2218',
+        precinct_id: 'PCT-003',
+        type: 'voter_intimidation',
+        severity: 'high',
+        triage_notes: 'Observer with credential OBS-554 approached three voters in line and asked partisan questions. Chief judge issued first warning at 10:02; behavior repeated 10:31; credential revoked 10:41 and County Board notified.',
+        structured_facts: 'observer_id=OBS-554, warnings_issued=2, credential_revoked_at=10:41, county_board_notified=true, no_law_enforcement_called',
+      },
+    },
+    {
+      label: 'Power outage relocate',
+      values: {
+        incident_id: 'INC-2231',
+        precinct_id: 'PCT-014',
+        type: 'power_outage',
+        severity: 'critical',
+        triage_notes: 'Building power lost 13:22; generator ran scanners but lighting inadequate. County dispatched relocation team; voting moved to PCT-013 Harrison Sports Complex at 14:48. All ballots cast at PCT-014 sealed and transported under dual-judge custody.',
+        structured_facts: 'outage_start=13:22, relocation_complete=14:48, ballots_in_transit=312, custody_seal=SEAL-9981, dual_judge=EJ-3001+EJ-3008',
+      },
+    },
+    {
+      label: 'Accessibility barrier',
+      values: {
+        incident_id: 'INC-2245',
+        precinct_id: 'PCT-011',
+        type: 'accessibility_barrier',
+        severity: 'medium',
+        triage_notes: 'ADA ramp blocked by delivery vehicle 11:10-11:25. One voter offered curbside voting and accepted. No voters turned away.',
+        structured_facts: 'block_duration_min=15, curbside_offered=1, accepted=1, denied=0',
+      },
+    },
+    {
+      label: 'Chain-of-custody anomaly',
+      values: {
+        incident_id: 'INC-2259',
+        precinct_id: 'PCT-007',
+        type: 'custody_anomaly',
+        severity: 'high',
+        triage_notes: 'Sealed ballot bag SEAL-9912 arrived at County Board with seal intact but transport log missing a handoff signature between chief judge and courier. Bag opened and ballots reconciled to count; no discrepancy.',
+        structured_facts: 'seal_id=SEAL-9912, missing_signature_handoff=courier_pickup, reconciled=true, count_discrepancy=0',
+      },
+    },
+  ],
+
+  'disinformation-quiz-generate': [
+    { label: 'Default — general misinformation', values: { topic: 'general election misinformation', count: 5, audience: 'poll_workers' } },
+    { label: 'Mail-in / absentee ballot myths', values: { topic: 'mail-in and absentee ballot misinformation', count: 5, audience: 'poll_workers' } },
+    { label: 'Voting machine / scanner integrity', values: { topic: 'voting machine and scanner integrity claims', count: 5, audience: 'chief_judges' } },
+    { label: 'Voter ID and registration rules', values: { topic: 'voter ID and registration rule misinformation', count: 6, audience: 'poll_workers' } },
+    { label: 'Election night results timing', values: { topic: 'why unofficial results change after election night', count: 5, audience: 'public_information_officers' } },
+  ],
+
+  'rules-translate': [
+    {
+      label: 'Provisional ballot rule -> es, zh',
+      values: {
+        source_text: 'If your name is not on the registration roll at this precinct, you may cast a provisional ballot. You must sign the provisional envelope. The County Election Board will verify your eligibility within 7 days. You will be notified by mail whether your ballot was counted.',
+        source_lang: 'en',
+        target_langs: 'es, zh',
+      },
+    },
+    {
+      label: 'Curbside voting -> es, vi, tl',
+      values: {
+        source_text: 'Voters with mobility limitations may request curbside voting. Two poll workers will bring the ballot and accessible voting equipment to your vehicle. Please remain in your vehicle and a poll worker will come to you within 10 minutes.',
+        source_lang: 'en',
+        target_langs: 'es, vi, tl',
+      },
+    },
+    {
+      label: 'Voter ID rule -> es, ru, pl',
+      values: {
+        source_text: 'You must present a valid photo ID to vote in person. Accepted forms include a state-issued driver license, state ID, U.S. passport, or military ID. If you do not have ID, you may still cast a provisional ballot.',
+        source_lang: 'en',
+        target_langs: 'es, ru, pl',
+      },
+    },
+    {
+      label: 'Polls open / close -> es, zh, ko',
+      values: {
+        source_text: 'Polls are open from 7:00 AM to 7:00 PM. Any voter in line at 7:00 PM will be allowed to vote.',
+        source_lang: 'en',
+        target_langs: 'es, zh, ko',
+      },
+    },
+    {
+      label: 'Right to assistance -> es, vi',
+      values: {
+        source_text: 'You have the right to bring a person of your choice to help you vote, except your employer or your union representative. You may also ask any two poll workers from different parties for assistance.',
+        source_lang: 'en',
+        target_langs: 'es, vi',
+      },
+    },
+  ],
+};
+
+// Patch SAMPLES with backlog entries so /api/ai/samples?feature=<x> works.
+for (const k of Object.keys(BACKLOG_SAMPLES)) SAMPLES[k] = BACKLOG_SAMPLES[k];
+
+// 17. POST /api/ai/training-qa-copilot
+router.post('/training-qa-copilot', async (req, res) => {
+  try {
+    const { question, handbook_context, role } = req.body || {};
+    if (!question) return res.status(400).json({ error: 'question is required' });
+    const result = await ai.trainingQaCopilot(question, handbook_context || '', role || 'poll_worker');
+    await record('training-qa-copilot', { question, role: role || 'poll_worker' }, result);
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 18. POST /api/ai/incident-report-draft  (sensitive — requires review)
+router.post('/incident-report-draft', async (req, res) => {
+  try {
+    const {
+      incident_id, precinct_id, type, severity,
+      triage_notes, structured_facts,
+    } = req.body || {};
+    if (!incident_id || !precinct_id || !type) {
+      return res.status(400).json({ error: 'incident_id, precinct_id, and type are required' });
+    }
+    const fields = {
+      incident_id, precinct_id, type,
+      severity: severity || 'medium',
+      triage_notes: triage_notes || '',
+      structured_facts: structured_facts || '',
+    };
+    const result = await ai.incidentReportDraft(fields);
+    const approval = await recordPendingApproval({
+      feature: 'incident-report-draft',
+      resource_type: 'incident_report',
+      resource_id: incident_id,
+      payload: { fields, draft: result },
+      requested_by: req.user?.email || req.user?.id || null,
+    });
+    const out = {
+      ...result,
+      requires_review: true,
+      approval_status: 'pending',
+      approver_id: null,
+      approval_timestamp: null,
+      approval_id: approval ? approval.id : null,
+      disclaimer: 'DRAFT incident narrative. Not part of the official record until signed off by an authorized election official.',
+    };
+    await record('incident-report-draft', fields, out);
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 19. POST /api/ai/disinformation-quiz-generate
+router.post('/disinformation-quiz-generate', async (req, res) => {
+  try {
+    const { topic, count, audience } = req.body || {};
+    const n = Math.max(1, Math.min(parseInt(count, 10) || 5, 20));
+    const result = await ai.disinformationQuizGenerate(topic || '', n, audience || 'poll_workers');
+    await record('disinformation-quiz-generate', { topic: topic || null, count: n, audience: audience || 'poll_workers' }, result);
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 20. POST /api/ai/rules-translate  (voter-facing — requires review)
+router.post('/rules-translate', async (req, res) => {
+  try {
+    const { source_text, source_lang, target_langs } = req.body || {};
+    if (!source_text) return res.status(400).json({ error: 'source_text is required' });
+    const tl = Array.isArray(target_langs)
+      ? target_langs
+      : (typeof target_langs === 'string' ? target_langs.split(',').map(s => s.trim()).filter(Boolean) : []);
+    if (tl.length === 0) return res.status(400).json({ error: 'target_langs is required (array or comma-separated)' });
+    const result = await ai.rulesTranslate(source_text, source_lang || 'en', tl);
+    const approval = await recordPendingApproval({
+      feature: 'rules-translate',
+      resource_type: 'rules_translation',
+      resource_id: null,
+      payload: { source_text, source_lang: source_lang || 'en', target_langs: tl, draft: result },
+      requested_by: req.user?.email || req.user?.id || null,
+    });
+    const out = {
+      ...result,
+      requires_review: true,
+      approval_status: 'pending',
+      approver_id: null,
+      approval_timestamp: null,
+      approval_id: approval ? approval.id : null,
+      disclaimer: result?.disclaimer || 'Unofficial translation. The English-language source rule governs. Not for public posting until reviewed and approved.',
+    };
+    await record('rules-translate', { source_lang: source_lang || 'en', target_langs: tl, len: source_text.length }, out);
+    res.json(out);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

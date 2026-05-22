@@ -152,6 +152,31 @@ export const aiTrainingGapAnalysis    = (body) => request('/ai/training-gap-anal
 export const aiVoterCommunicationDraft= (body) => request('/ai/voter-communication-draft',{ method: 'POST', body: JSON.stringify(body || {}) });
 export const aiPostElectionReport     = (body) => request('/ai/post-election-report',     { method: 'POST', body: JSON.stringify(body || {}) });
 
+// AI — Pass 7 backlog (4 new verbs)
+export const aiTrainingQaCopilot       = (body) => request('/ai/training-qa-copilot',        { method: 'POST', body: JSON.stringify(body || {}) });
+export const aiIncidentReportDraft     = (body) => request('/ai/incident-report-draft',      { method: 'POST', body: JSON.stringify(body || {}) });
+export const aiDisinformationQuizGen   = (body) => request('/ai/disinformation-quiz-generate',{ method: 'POST', body: JSON.stringify(body || {}) });
+export const aiRulesTranslate          = (body) => request('/ai/rules-translate',            { method: 'POST', body: JSON.stringify(body || {}) });
+
+// AI human-in-the-loop approvals
+export const aiApprovalsApi = {
+  list:   (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''))
+    ).toString();
+    return request(`/ai-approvals${qs ? `?${qs}` : ''}`);
+  },
+  get:     (id)              => request(`/ai-approvals/${id}`),
+  approve: (id, approver_id, notes) => request(`/ai-approvals/${id}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ approver_id, notes }),
+  }),
+  reject:  (id, approver_id, rejection_reason) => request(`/ai-approvals/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ approver_id, rejection_reason }),
+  }),
+};
+
 // AI history
 export const getAIHistory = (feature, limit = 25) => {
   const qs = new URLSearchParams({

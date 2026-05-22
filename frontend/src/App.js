@@ -42,16 +42,27 @@ import AITrainingGapAnalysisPage from './pages/AITrainingGapAnalysisPage';
 import AIVoterCommunicationDraftPage from './pages/AIVoterCommunicationDraftPage';
 import AIPostElectionReportPage from './pages/AIPostElectionReportPage';
 
+// Pass 7 — backlog AI pages + sign-off queue
+import AITrainingQaCopilotPage from './pages/AITrainingQaCopilotPage';
+import AIIncidentReportDraftPage from './pages/AIIncidentReportDraftPage';
+import AIDisinformationQuizPage from './pages/AIDisinformationQuizPage';
+import AIRulesTranslatePage from './pages/AIRulesTranslatePage';
+import AIApprovalsPage from './pages/AIApprovalsPage';
+
 // Admin
 import WebhooksPage from './pages/WebhooksPage';
 
 // Custom analytics views
 import CustomViewsPage from './pages/CustomViewsPage';
+import PollWorkerBreakCoveragePage from './pages/PollWorkerBreakCoveragePage';
 
 import LoginPage from './pages/LoginPage';
 import { getToken } from './services/api';
 
 import './App.css';
+
+import CodexCustomVizFeature from './pages/CodexCustomVizFeature';
+import CodexOperationsFeature from './pages/CodexOperationsFeature';
 
 function RequireAuth({ children }) {
   const location = useLocation();
@@ -69,6 +80,9 @@ function ShellRoutes() {
         <Topbar />
         <div style={{ padding: '24px 32px' }}>
           <Routes>
+        <Route path="/codex/custom-viz" element={<CodexCustomVizFeature />} />
+        <Route path="/codex/operations" element={<CodexOperationsFeature />} />
+
             <Route path="/" element={<Dashboard />} />
 
             <Route path="/precincts"             element={<PrecinctsPage />} />
@@ -107,9 +121,17 @@ function ShellRoutes() {
             <Route path="/ai/voter-communication-draft"element={<AIVoterCommunicationDraftPage />} />
             <Route path="/ai/post-election-report"     element={<AIPostElectionReportPage />} />
 
+            {/* Pass 7 backlog routes */}
+            <Route path="/ai/training-qa-copilot"          element={<AITrainingQaCopilotPage />} />
+            <Route path="/ai/incident-report-draft"        element={<AIIncidentReportDraftPage />} />
+            <Route path="/ai/disinformation-quiz-generate" element={<AIDisinformationQuizPage />} />
+            <Route path="/ai/rules-translate"              element={<AIRulesTranslatePage />} />
+            <Route path="/ai-approvals"                    element={<AIApprovalsPage />} />
+
             <Route path="/webhooks" element={<WebhooksPage />} />
 
             <Route path="/custom-views" element={<CustomViewsPage />} />
+            <Route path="/poll-worker-break-coverage" element={<PollWorkerBreakCoveragePage />} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -452,6 +452,99 @@ async function postElectionReport(snapshot = {}) {
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', recommendations: [] });
 }
 
+// ──────────────────────────────────────────────────────────────
+// Pass 7 — Backlog AI verbs
+// ──────────────────────────────────────────────────────────────
+
+// 17. Training Q&A copilot — answer poll-worker procedure questions grounded in handbook.
+async function trainingQaCopilot(question, handbookContext = '', role = 'poll_worker') {
+  const sys = `${SYSTEM_PROMPT} You answer poll-worker procedure questions grounded ONLY in the supplied jurisdiction handbook excerpt. If the handbook does not cover the question, say so plainly and route to a chief judge. Return strict JSON:
+{
+  "question": string,
+  "role": string,
+  "answer": string,
+  "citations": [{ "section": string, "excerpt": string }],
+  "confidence": "low"|"medium"|"high",
+  "escalate_to_chief_judge": boolean,
+  "follow_up_questions": [string],
+  "disclaimer": string,
+  "summary": string
+}`;
+  const usr = `Role: ${role}\nQuestion: ${question}\n\nHandbook excerpt (authoritative):\n${handbookContext || '(no handbook excerpt provided — answer must indicate this and escalate)'}`;
+  const r = await callOpenRouter(sys, usr);
+  return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', answer: '', citations: [] });
+}
+
+// 18. Incident report draft — convert triage notes + structured fields into formal narrative.
+// Sensitive: caller wraps with requires_review:true and an ai_approvals row.
+async function incidentReportDraft(fields = {}) {
+  const sys = `${SYSTEM_PROMPT} You draft a FORMAL, NEUTRAL incident-report narrative for an election office. Use only the supplied structured facts; do NOT invent voters, motivations, partisan framing, or legal conclusions. State facts, observed actions, and operational impact. Return strict JSON:
+{
+  "incident_id": string,
+  "precinct_id": string,
+  "type": string,
+  "severity": "low"|"medium"|"high"|"critical",
+  "headline": string,
+  "narrative": string,
+  "structured_facts": [{ "field": string, "value": string }],
+  "witnesses": [string],
+  "operational_impact": string,
+  "actions_taken": [string],
+  "open_questions": [string],
+  "neutrality_check": string,
+  "summary": string
+}`;
+  const usr = `Structured incident fields + triage notes:\n${JSON.stringify(fields, null, 2)}`;
+  const r = await callOpenRouter(sys, usr);
+  return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', narrative: '', structured_facts: [] });
+}
+
+// 19. Disinformation quiz generate — scenario-based items with official-source citations.
+async function disinformationQuizGenerate(topic = '', count = 5, audience = 'poll_workers') {
+  const sys = `${SYSTEM_PROMPT} You generate scenario-based anti-disinformation quiz items for poll-worker training. Each item must include an OFFICIAL source citation (EAC, state SoS, county election office, NIST, CISA). Do not promote any candidate, party, or policy position. Return strict JSON:
+{
+  "topic": string,
+  "audience": string,
+  "items": [{
+    "id": string,
+    "scenario": string,
+    "question": string,
+    "options": [{ "label": string, "text": string, "is_correct": boolean }],
+    "rationale": string,
+    "official_source": { "agency": string, "url_or_doc": string, "year": number },
+    "skill_practiced": string
+  }],
+  "facilitator_notes": string,
+  "summary": string
+}`;
+  const usr = `Topic: ${topic || 'general election misinformation'}\nDesired item count: ${count}\nAudience: ${audience}`;
+  const r = await callOpenRouter(sys, usr);
+  return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', items: [] });
+}
+
+// 20. Rules translate — translate procedural rules across supported languages.
+// Sensitive (voter-facing): caller wraps with requires_review:true + ai_approvals row.
+async function rulesTranslate(sourceText = '', sourceLang = 'en', targetLangs = []) {
+  const sys = `${SYSTEM_PROMPT} You translate procedural election rules into the requested languages. Preserve precise meaning of legal/procedural terms. After each translation, produce a back-translation to English for verification. Always include a disclaimer that translations are unofficial and the English source governs. Return strict JSON:
+{
+  "source_language": string,
+  "source_text": string,
+  "translations": [{
+    "language": string,
+    "translated_text": string,
+    "back_translation_en": string,
+    "back_translation_drift_notes": string,
+    "translator_confidence": "low"|"medium"|"high",
+    "needs_human_review": boolean
+  }],
+  "disclaimer": string,
+  "summary": string
+}`;
+  const usr = `Source language: ${sourceLang}\nTarget languages: ${JSON.stringify(targetLangs)}\nSource text:\n${sourceText}`;
+  const r = await callOpenRouter(sys, usr);
+  return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', translations: [] });
+}
+
 module.exports = {
   callOpenRouter,
   safeJsonParse,
@@ -471,4 +564,8 @@ module.exports = {
   trainingGapAnalysis,
   voterCommunicationDraft,
   postElectionReport,
+  trainingQaCopilot,
+  incidentReportDraft,
+  disinformationQuizGenerate,
+  rulesTranslate,
 };

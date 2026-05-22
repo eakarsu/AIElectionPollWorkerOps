@@ -57,8 +57,11 @@ app.use('/api/language-support',      require('./routes/languageSupport'));
 app.use('/api/audit-log',             require('./routes/auditLog'));
 app.use('/api/transmissions',         require('./routes/transmissions'));
 
-// AI routes (16 verbs + history + samples)
+// AI routes (16 verbs + history + samples; pass 7 adds 4 backlog verbs)
 app.use('/api/ai', require('./routes/ai'));
+
+// AI human-in-the-loop sign-off (pass 7)
+app.use('/api/ai-approvals', require('./routes/aiApprovals'));
 
 // Cross-cutting
 app.use('/api/notifications', require('./routes/notifications'));
@@ -70,6 +73,7 @@ app.use('/api/dashboard', require('./routes/dashboard'));
 
 // Custom analytics views (heatmap, custody trail, equipment grid, ballot sankey)
 app.use('/api/custom-views', require('./routes/customViews'));
+app.use('/api/poll-worker-break-coverage', require('./routes/pollWorkerBreakCoverage'));
 
 app.listen(PORT, () => {
   console.log(`\nAI Election Poll-Worker Ops API running on http://localhost:${PORT}\n`);

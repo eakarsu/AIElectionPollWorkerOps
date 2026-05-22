@@ -17,6 +17,7 @@ const POLL_WORKER_LINKS = [
   { to: '/poll-workers',       label: 'Poll Workers' },
   { to: '/election-judges',    label: 'Election Judges' },
   { to: '/training-sessions',  label: 'Training Sessions' },
+  { to: '/poll-worker-break-coverage', label: 'Break Coverage' },
 ];
 
 const EQUIPMENT_LINKS = [
@@ -43,6 +44,7 @@ const ACCESSIBILITY_LINKS = [
 const GOVERNANCE_LINKS = [
   { to: '/observers',          label: 'Observers' },
   { to: '/audit-log',          label: 'Audit Log' },
+  { to: '/ai-approvals',       label: 'AI Approvals (Sign-off)' },
 ];
 
 const AI_OPS_LINKS = [
@@ -54,7 +56,10 @@ const AI_OPS_LINKS = [
   { to: '/ai/supply-resupply-plan',    label: 'AI · Supply Resupply Plan' },
   { to: '/ai/observer-coordination',   label: 'AI · Observer Coordination' },
   { to: '/ai/training-gap-analysis',   label: 'AI · Training Gap Analysis' },
+  { to: '/ai/training-qa-copilot',     label: 'AI · Training Q&A Copilot' },
+  { to: '/ai/disinformation-quiz-generate', label: 'AI · Disinformation Quiz' },
   { to: '/ai/language-support-plan',   label: 'AI · Language Support Plan' },
+  { to: '/ai/rules-translate',         label: 'AI · Rules Translate' },
   { to: '/ai/accessibility-gap-analyze', label: 'AI · Accessibility Gap Analyze' },
 ];
 
@@ -64,6 +69,7 @@ const AI_REPORTING_LINKS = [
   { to: '/ai/chain-of-custody-anomaly',label: 'AI · Chain-of-Custody Anomaly' },
   { to: '/ai/transmission-anomaly',    label: 'AI · Transmission Anomaly' },
   { to: '/ai/voter-communication-draft', label: 'AI · Voter Communication Draft' },
+  { to: '/ai/incident-report-draft',   label: 'AI · Incident Report Draft' },
   { to: '/ai/post-election-report',    label: 'AI · Post-Election Report' },
 ];
 

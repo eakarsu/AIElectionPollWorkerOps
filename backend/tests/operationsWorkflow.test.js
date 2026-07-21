@@ -1,0 +1,5 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {validateWorker,validateAssignment,validateOfflineCheckin,overlaps,requiresManualDispatch}=require('../services/operationsWorkflow');
+test('worker onboarding requires authorized eligibility confirmation',()=>{assert.throws(()=>validateWorker({worker_reference:'W1'}),/eligibility/);assert.equal(validateWorker({worker_reference:'W1',eligibility_confirmed:true,eligibility_basis:'roster match'}).worker_reference,'W1');});
+test('assignment overlap detects conflicts',()=>{const a=validateAssignment({worker_id:1,site_id:'P1',role:'clerk',starts_at:'2026-11-03T06:00:00Z',ends_at:'2026-11-03T14:00:00Z'});assert.equal(overlaps(a,{starts_at:'2026-11-03T13:00:00Z',ends_at:'2026-11-03T18:00:00Z'}),true);});
+test('offline event identity is deterministic and validated',()=>assert.equal(validateOfflineCheckin({device_id:'D1',local_sequence:0,worker_id:1,site_id:'P1',event_type:'check_in',recorded_at:'2026-11-03T06:00:00Z'}).local_sequence,0));
+test('high severity queues manual dispatch without claiming execution',()=>assert.equal(requiresManualDispatch('high'),true));

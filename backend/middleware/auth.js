@@ -2,8 +2,10 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
-const JWT_SECRET =
-  process.env.JWT_SECRET || 'election-pollworker-ops-secret-key-2026';
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32 || process.env.JWT_SECRET.startsWith('replace-')) {
+  throw new Error('JWT_SECRET must contain at least 32 non-placeholder characters');
+}
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];

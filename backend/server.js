@@ -37,6 +37,13 @@ app.use('/api/auth', require('./routes/auth'));
 // Everything below requires a Bearer token.
 app.use('/api', authenticateToken);
 
+app.use('/api', (req, res, next) => {
+  const governed = req.path === '/operations' || req.path.startsWith('/operations/');
+  const legacyEnabled = process.env.NODE_ENV !== 'production' && process.env.ENABLE_LEGACY_PROTOTYPE_ROUTES === 'true';
+  if (governed || legacyEnabled) return next();
+  return res.status(404).json({ error: 'Legacy prototype route is quarantined' });
+});
+
 // 18 CRUD entities
 app.use('/api/precincts',             require('./routes/precincts'));
 app.use('/api/poll-workers',          require('./routes/pollWorkers'));
@@ -74,6 +81,7 @@ app.use('/api/dashboard', require('./routes/dashboard'));
 // Custom analytics views (heatmap, custody trail, equipment grid, ballot sankey)
 app.use('/api/custom-views', require('./routes/customViews'));
 app.use('/api/poll-worker-break-coverage', require('./routes/pollWorkerBreakCoverage'));
+app.use('/api/operations', require('./routes/operationsWorkflow'));
 
 app.listen(PORT, () => {
   console.log(`\nAI Election Poll-Worker Ops API running on http://localhost:${PORT}\n`);

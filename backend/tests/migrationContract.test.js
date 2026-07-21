@@ -1,0 +1,2 @@
+const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');
+test('operations migration includes assignment constraints, offline identity, dispatch, and audit',()=>{const sql=fs.readFileSync(path.join(__dirname,'../migrations/004_governed_operations.sql'),'utf8');for(const term of ['poll_assignments','CHECK(starts_at<ends_at)','poll_checkin_events','UNIQUE(jurisdiction_id,device_id,local_sequence)','poll_dispatch_outbox','poll_ops_events'])assert.ok(sql.includes(term),term);});

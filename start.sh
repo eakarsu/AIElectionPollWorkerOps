@@ -81,6 +81,7 @@ if [ "${NODE_ENV:-}" = test ] && [ -n "${RUNTIME_PROJECT_SOURCE:-}" ] && [ -d "$
 cd "$root";[ -f "$launcher_root/.env" ]||{ echo "Missing .env; copy .env.example." >&2;exit 1; }
 [ -d backend/node_modules ]&&[ -d frontend/node_modules ]||{ echo "Run scripts/bootstrap.sh first." >&2;exit 1; }
 set -a;. "$launcher_root/.env";set +a
+if [ "${NODE_ENV:-development}" != production ] && [ "${ENABLE_DEMO_CREDENTIAL_AUTOFILL:-true}" = true ]; then psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/004_governed_operations.sql >/dev/null; BOOTSTRAP_ACKNOWLEDGEMENT=create-initial-admin node backend/scripts/createAdmin.js; fi
 export ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-http://127.0.0.1:${FRONTEND_PORT:-3000}}"
 export REACT_APP_API_BASE="${REACT_APP_API_BASE:-http://127.0.0.1:${BACKEND_PORT:-3087}/api}"
 backend_pid='';frontend_pid='';cleanup(){ [ -z "$backend_pid" ]||kill "$backend_pid" 2>/dev/null||true;[ -z "$frontend_pid" ]||kill "$frontend_pid" 2>/dev/null||true;};trap cleanup EXIT INT TERM
